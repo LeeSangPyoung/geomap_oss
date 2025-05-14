@@ -14,7 +14,7 @@ def init_db(path):
     """)
     metadata = [
         ('name', 'Korea Map'),
-        ('format', 'png'),
+        ('format', 'jpeg'),
         ('type', 'baselayer'),
         ('version', '1.0'),
         ('description', 'OSM tiles for Korea'),
@@ -41,9 +41,9 @@ def walk_tiles(tile_dir, mbtiles_path):
             if not x.isdigit():
                 continue
             for y_file in os.listdir(os.path.join(tile_dir, z, x)):
-                if not y_file.endswith(".png"):
+                if not y_file.endswith(".jpeg"):
                     continue
-                y = y_file.replace(".png", "")
+                y = y_file.replace(".jpeg", "")
                 full_path = os.path.join(tile_dir, z, x, y_file)
                 try:
                     tile_data = encode_tile(full_path)

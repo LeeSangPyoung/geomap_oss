@@ -56,6 +56,6 @@ def walk_tiles(tile_dir, mbtiles_path):
     print(f"[✓] 변환 완료: {mbtiles_path}")
 
 if __name__ == "__main__":
-    input_folder = r".\vworld_tiles_korea_by_zoom"
-    output_file = r".\vworld_korea.mbtiles"
+    input_folder = r".\osm_tiles_korea_by_zoom"
+    output_file = r".\osm_korea.mbtiles"
     walk_tiles(input_folder, output_file)

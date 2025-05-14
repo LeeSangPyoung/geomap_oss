@@ -16,7 +16,7 @@ MAX_WORKERS = 4
 # 대한민국 전체 범위
 MIN_LAT, MAX_LAT = 33.0, 39.6
 MIN_LON, MAX_LON = 124.5, 131.0
-ZOOM_MIN, ZOOM_MAX = 5, 18
+ZOOM_MIN, ZOOM_MAX = 5, 12
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -29,7 +29,7 @@ HEADERS = {
 }
 
 # ✅ GeoJSON 경로 (수정 가능)
-CITY_GDF = gpd.read_file("D:/oss2map2/oss2map/data/korea_city_boundaries.geojson")
+CITY_GDF = gpd.read_file("../data/korea_city_boundaries.geojson")
 
 def is_in_city(lat, lon):
     point = Point(lon, lat)
@@ -43,13 +43,13 @@ def is_mountain(lat, lon):
 
 def get_max_zoom(lat, lon):
     if is_in_city(lat, lon):
-        return 17
+        return 11
     elif is_mountain(lat, lon):
-        return 14
+        return 10
     elif is_land(lat, lon):
-        return 15
+        return 10
     else:
-        return 13
+        return 10
 
 def deg2num(lat, lon, zoom):
     lat_rad = math.radians(lat)

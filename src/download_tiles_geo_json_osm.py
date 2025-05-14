@@ -17,10 +17,10 @@ HEADERS = {
 # 대한민국 전체 범위
 MIN_LAT, MAX_LAT = 33.0, 39.6
 MIN_LON, MAX_LON = 124.5, 131.0
-ZOOM_MIN, ZOOM_MAX = 5, 17
+ZOOM_MIN, ZOOM_MAX = 5, 12
 
 # ✅ GeoJSON 경로 수정하세요
-CITY_GDF = gpd.read_file("D:/oss2map2/oss2map/data/korea_city_boundaries.geojson")
+CITY_GDF = gpd.read_file("../data/korea_city_boundaries.geojson")
 
 # Geo 판별 함수
 def is_in_city(lat, lon):
@@ -37,16 +37,16 @@ def is_mountain(lat, lon):
 def get_max_zoom(lat, lon):
     if is_in_city(lat, lon):
         print("city~~")
-        return 17  # 도시
+        return 11  # 도시
     elif is_mountain(lat, lon):
         print("mountain~~")
-        return 14  # 산지
+        return 10  # 산지
     elif is_land(lat, lon):
         print("nongchon")
-        return 14  # 농촌
+        return 10  # 농촌
     else:
         print("sea!!~~~!!")
-        return 12  # 바다
+        return 10  # 바다
 
 # 좌표 변환
 def deg2num(lat, lon, zoom):

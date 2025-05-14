@@ -3,7 +3,7 @@ import sqlite3
 import os
 
 app = Flask(__name__)
-MBTILES_PATH = r"D:\oss2map2\oss2map\src\korea.mbtiles"
+MBTILES_PATH = r"./korea.mbtiles"
 
 def get_tile(z, x, y):
     conn = sqlite3.connect(MBTILES_PATH)
@@ -33,4 +33,4 @@ def tile(z, x, y):
         return abort(404)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8082)
+    app.run(host="0.0.0.0", port=8090)

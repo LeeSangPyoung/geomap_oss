@@ -3,7 +3,7 @@ import sqlite3
 import os
 
 app = Flask(__name__)
-MBTILES_PATH = r"./korea.mbtiles"
+MBTILES_PATH = r"./osm_korea.mbtiles"
 
 def get_tile(z, x, y):
     conn = sqlite3.connect(MBTILES_PATH)

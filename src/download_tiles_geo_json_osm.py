@@ -28,7 +28,7 @@ def is_mountain(lat, lon):
 
 def get_max_zoom(lat, lon, selected_union):
     point = Point(lon, lat)
-    if selected_union.intersects(point):  # ✅ 경계 포함 체크
+    if selected_union.intersects(point):  # 경계 포함 체크
         return 17
     elif is_mountain(lat, lon):
         return 14
@@ -95,17 +95,17 @@ def main():
     min_lon, min_lat, max_lon, max_lat = bounds
 
     for z in range(ZOOM_MIN, zoom_max + 1):
-        x_start, y_start = deg2num(max_lat, min_lon, z)
-        x_end, y_end = deg2num(min_lat, max_lon, z)
-        print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_start}~{y_end} for {region_names}")
+        x_start, y_end = deg2num(max_lat, min_lon, z)  # 좌상단
+        x_end, y_start = deg2num(min_lat, max_lon, z)  # 우하단
+        print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_end}~{y_start} for {region_names}")
 
         tasks = []
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             for x in range(x_start, x_end + 1):
-                for y in range(y_start, y_end + 1):
+                for y in range(y_end, y_start + 1):  # 위에서 아래로
                     lat, lon = num2deg(x + 0.5, y + 0.5, z)
                     if not selected_union.intersects(Point(lon, lat)):
-                        continue  # ✅ 경계 밖이면 스킵
+                        continue
                     max_tile_zoom = get_max_zoom(lat, lon, selected_union)
                     if z <= max_tile_zoom:
                         tasks.append(executor.submit(download_tile, z, x, y))

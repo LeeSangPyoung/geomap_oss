@@ -16,12 +16,10 @@ HEADERS = {
 }
 
 ZOOM_MIN = 5
-CITY_GDF = gpd.read_file("../data/korea_city_boundaries.geojson")
-# CITY_GDF = gpd.read_file("D:/oss2map2/oss2map/data/korea_city_boundaries.geojson")
 
-def is_in_city(lat, lon):
-    point = Point(lon, lat)
-    return CITY_GDF.contains(point).any()
+# GeoJSON 파일 로드 (상대경로 기준)
+CITY_GDF = gpd.read_file("../data/korea_city_boundaries.geojson")
+
 
 def is_land(lat, lon):
     return 33.0 <= lat <= 39.6 and 124.5 <= lon <= 131.5
@@ -29,8 +27,9 @@ def is_land(lat, lon):
 def is_mountain(lat, lon):
     return (37.0 <= lat <= 38.8 and 127.5 <= lon <= 129.5) or (33.2 <= lat <= 33.6 and 126.2 <= lon <= 126.7)
 
-def get_max_zoom(lat, lon):
-    if is_in_city(lat, lon):
+def get_max_zoom(lat, lon, selected_union):
+    point = Point(lon, lat)
+    if selected_union.contains(point):
         return 17
     elif is_mountain(lat, lon):
         return 14
@@ -92,6 +91,7 @@ def main():
     if selected.empty:
         raise ValueError(f"선택한 지역을 찾을 수 없습니다: {region_names}")
 
+    selected_union = selected.unary_union
     bounds = selected.total_bounds  # minx, miny, maxx, maxy
     min_lon, min_lat, max_lon, max_lat = bounds
 
@@ -105,7 +105,9 @@ def main():
             for x in range(x_start, x_end + 1):
                 for y in range(y_start, y_end + 1):
                     lat, lon = num2deg(x + 0.5, y + 0.5, z)
-                    max_tile_zoom = get_max_zoom(lat, lon)
+                    if not selected_union.contains(Point(lon, lat)):
+                        continue  # 도시 외부는 건너뜀
+                    max_tile_zoom = get_max_zoom(lat, lon, selected_union)
                     if z <= max_tile_zoom:
                         tasks.append(executor.submit(download_tile, z, x, y))
             for future in as_completed(tasks):

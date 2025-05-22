@@ -28,7 +28,7 @@ def is_mountain(lat, lon):
 
 def get_max_zoom(lat, lon, selected_union):
     point = Point(lon, lat)
-    if selected_union.intersects(point):  # 경계 포함 체크
+    if selected_union.intersects(point):
         return 17
     elif is_mountain(lat, lon):
         return 14
@@ -95,8 +95,8 @@ def main():
     min_lon, min_lat, max_lon, max_lat = bounds
 
     for z in range(ZOOM_MIN, zoom_max + 1):
-        x_start, y_end = deg2num(max_lat, min_lon, z)  # 좌상단
-        x_end, y_start = deg2num(min_lat, max_lon, z)  # 우하단
+        x_start, y_end = deg2num(max_lat, min_lon, z)
+        x_end, y_start = deg2num(min_lat, max_lon, z)
         print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_end}~{y_start} for {region_names}")
 
         tasks = []
@@ -104,11 +104,21 @@ def main():
             for x in range(x_start, x_end + 1):
                 for y in range(y_end, y_start + 1):  # 위에서 아래로
                     lat, lon = num2deg(x + 0.5, y + 0.5, z)
-                    if not selected_union.intersects(Point(lon, lat)):
+                    point = Point(lon, lat)
+
+                    # ✅ ZOOM 5는 전국 모든 타일 다운로드
+                    if z == 5:
+                        tasks.append(executor.submit(download_tile, z, x, y))
                         continue
+
+                    # ✅ ZOOM > 5는 선택한 도시 경계 내일 때만 다운로드
+                    if not selected_union.intersects(point):
+                        continue
+
                     max_tile_zoom = get_max_zoom(lat, lon, selected_union)
                     if z <= max_tile_zoom:
                         tasks.append(executor.submit(download_tile, z, x, y))
+
             for future in as_completed(tasks):
                 _ = future.result()
 

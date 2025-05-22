@@ -16,7 +16,8 @@ HEADERS = {
 }
 
 ZOOM_MIN = 5
-CITY_GDF = gpd.read_file("D:/oss2map2/oss2map/data/korea_city_boundaries.geojson")
+CITY_GDF = gpd.read_file("../data/korea_city_boundaries.geojson")
+# CITY_GDF = gpd.read_file("D:/oss2map2/oss2map/data/korea_city_boundaries.geojson")
 
 def is_in_city(lat, lon):
     point = Point(lon, lat)

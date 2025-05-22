@@ -17,9 +17,8 @@ HEADERS = {
 
 ZOOM_MIN = 5
 
-# GeoJSON 파일 로드 (상대경로 기준)
+# GeoJSON 파일 로드
 CITY_GDF = gpd.read_file("../data/korea_city_boundaries.geojson")
-
 
 def is_land(lat, lon):
     return 33.0 <= lat <= 39.6 and 124.5 <= lon <= 131.5
@@ -29,7 +28,7 @@ def is_mountain(lat, lon):
 
 def get_max_zoom(lat, lon, selected_union):
     point = Point(lon, lat)
-    if selected_union.contains(point):
+    if selected_union.intersects(point):  # ✅ 경계 포함 체크
         return 17
     elif is_mountain(lat, lon):
         return 14
@@ -105,8 +104,8 @@ def main():
             for x in range(x_start, x_end + 1):
                 for y in range(y_start, y_end + 1):
                     lat, lon = num2deg(x + 0.5, y + 0.5, z)
-                    if not selected_union.contains(Point(lon, lat)):
-                        continue  # 도시 외부는 건너뜀
+                    if not selected_union.intersects(Point(lon, lat)):
+                        continue  # ✅ 경계 밖이면 스킵
                     max_tile_zoom = get_max_zoom(lat, lon, selected_union)
                     if z <= max_tile_zoom:
                         tasks.append(executor.submit(download_tile, z, x, y))

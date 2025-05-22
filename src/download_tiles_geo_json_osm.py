@@ -21,7 +21,7 @@ ZOOM_MIN = 5
 CITY_GDF = gpd.read_file("../data/korea_city_boundaries.geojson")
 
 def is_land(lat, lon):
-    return 33.0 <= lat <= 39.6 and 124.5 <= lon <= 131.5
+    return 33.0 <= lat <= 39.6 and 124.5 <= lon <= 131.0
 
 def is_mountain(lat, lon):
     return (37.0 <= lat <= 38.8 and 127.5 <= lon <= 129.5) or (33.2 <= lat <= 33.6 and 126.2 <= lon <= 126.7)
@@ -91,27 +91,27 @@ def main():
         raise ValueError(f"선택한 지역을 찾을 수 없습니다: {region_names}")
 
     selected_union = selected.unary_union
-    bounds = selected.total_bounds  # minx, miny, maxx, maxy
+    bounds = CITY_GDF.total_bounds  # 전국 범위 사용
     min_lon, min_lat, max_lon, max_lat = bounds
 
     for z in range(ZOOM_MIN, zoom_max + 1):
         x_start, y_end = deg2num(max_lat, min_lon, z)
         x_end, y_start = deg2num(min_lat, max_lon, z)
-        print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_end}~{y_start} for {region_names}")
+        print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_end}~{y_start} for {region_names} + 전국")
 
         tasks = []
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             for x in range(x_start, x_end + 1):
-                for y in range(y_end, y_start + 1):  # 위에서 아래로
+                for y in range(y_end, y_start + 1):
                     lat, lon = num2deg(x + 0.5, y + 0.5, z)
                     point = Point(lon, lat)
 
-                    # ✅ ZOOM 5는 전국 모든 타일 다운로드
-                    if z == 5:
+                    if z <= 12:
+                        # 전국 줌 5~12 무조건 다운로드
                         tasks.append(executor.submit(download_tile, z, x, y))
                         continue
 
-                    # ✅ ZOOM > 5는 선택한 도시 경계 내일 때만 다운로드
+                    # 줌 13 이상은 region 내부만
                     if not selected_union.intersects(point):
                         continue
 

@@ -2,6 +2,7 @@ import os
 import math
 import requests
 import time
+import argparse
 import geopandas as gpd
 from shapely.geometry import Point
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -14,15 +15,9 @@ HEADERS = {
     "User-Agent": "MyTileDownloader/1.0 (tkatlqdbr@nate.com)"
 }
 
-# 대한민국 전체 범위
-MIN_LAT, MAX_LAT = 33.0, 39.6
-MIN_LON, MAX_LON = 124.5, 131.0
-ZOOM_MIN, ZOOM_MAX = 5, 13
+ZOOM_MIN = 5
+CITY_GDF = gpd.read_file("D:/oss2map2/oss2map/data/korea_city_boundaries.geojson")
 
-# ✅ GeoJSON 경로 수정하세요
-CITY_GDF = gpd.read_file("../data/korea_city_boundaries.geojson")
-
-# Geo 판별 함수
 def is_in_city(lat, lon):
     point = Point(lon, lat)
     return CITY_GDF.contains(point).any()
@@ -31,20 +26,18 @@ def is_land(lat, lon):
     return 33.0 <= lat <= 39.6 and 124.5 <= lon <= 131.5
 
 def is_mountain(lat, lon):
-    # 간단한 임시 규칙: 강원도·제주도 위도 경도 범위 내 산악
     return (37.0 <= lat <= 38.8 and 127.5 <= lon <= 129.5) or (33.2 <= lat <= 33.6 and 126.2 <= lon <= 126.7)
 
 def get_max_zoom(lat, lon):
     if is_in_city(lat, lon):
-        return 12
+        return 17
     elif is_mountain(lat, lon):
-        return 10
+        return 14
     elif is_land(lat, lon):
-        return 10
+        return 14
     else:
-        return 10
+        return 12
 
-# 좌표 변환
 def deg2num(lat, lon, zoom):
     lat_rad = math.radians(lat)
     n = 2.0 ** zoom
@@ -83,21 +76,37 @@ def download_tile(z, x, y):
             log.write(f"{z},{x},{y} - {e}\n")
         print(f"[✗] {z}/{x}/{y} - {e}")
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--zoom", type=int, default=17, help="최대 줌 레벨 (default: 17)")
+    parser.add_argument("--region", nargs="+", required=True, help="지역 이름 리스트 (예: 서울특별시 경기도)")
+    return parser.parse_args()
+
 def main():
-    for z in range(ZOOM_MIN, ZOOM_MAX + 1):
-        x_start, y_start = deg2num(MAX_LAT, MIN_LON, z)
-        x_end, y_end = deg2num(MIN_LAT, MAX_LON, z)
-        print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_start}~{y_end}")
+    args = parse_args()
+    zoom_max = args.zoom
+    region_names = args.region
+
+    selected = CITY_GDF[CITY_GDF["CTP_KOR_NM"].isin(region_names)]
+    if selected.empty:
+        raise ValueError(f"선택한 지역을 찾을 수 없습니다: {region_names}")
+
+    bounds = selected.total_bounds  # minx, miny, maxx, maxy
+    min_lon, min_lat, max_lon, max_lat = bounds
+
+    for z in range(ZOOM_MIN, zoom_max + 1):
+        x_start, y_start = deg2num(max_lat, min_lon, z)
+        x_end, y_end = deg2num(min_lat, max_lon, z)
+        print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_start}~{y_end} for {region_names}")
 
         tasks = []
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             for x in range(x_start, x_end + 1):
                 for y in range(y_start, y_end + 1):
                     lat, lon = num2deg(x + 0.5, y + 0.5, z)
-                    max_zoom = get_max_zoom(lat, lon)
-                    if z <= max_zoom:
+                    max_tile_zoom = get_max_zoom(lat, lon)
+                    if z <= max_tile_zoom:
                         tasks.append(executor.submit(download_tile, z, x, y))
-
             for future in as_completed(tasks):
                 _ = future.result()
 

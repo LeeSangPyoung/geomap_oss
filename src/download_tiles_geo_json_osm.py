@@ -1,34 +1,50 @@
 import os
 import math
-import requests
 import time
 import argparse
+import logging
+import requests
 import geopandas as gpd
+from tqdm import tqdm
 from shapely.geometry import Point
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from shapely.strtree import STRtree
+from concurrent.futures import ThreadPoolExecutor
 
+# 설정
 TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 OUTPUT_DIR = "osm_tiles_korea_by_zoom"
 FAILED_LOG = "failed_osm_tiles.txt"
-MAX_WORKERS = 4
+LOG_FILE = "download.log"
+MAX_WORKERS = 8
+ZOOM_MIN = 5
 HEADERS = {
     "User-Agent": "MyTileDownloader/1.0 (tkatlqdbr@nate.com)"
 }
 
-ZOOM_MIN = 5
+# ✅ 로그 설정 (콘솔 + 파일)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE, mode='w', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
 
-# GeoJSON 파일 로드
+# ✅ GeoJSON 로드
 CITY_GDF = gpd.read_file("../data/korea_city_boundaries.geojson")
 
+# 위치 판별
 def is_land(lat, lon):
     return 33.0 <= lat <= 39.6 and 124.5 <= lon <= 131.0
 
 def is_mountain(lat, lon):
-    return (37.0 <= lat <= 38.8 and 127.5 <= lon <= 129.5) or (33.2 <= lat <= 33.6 and 126.2 <= lon <= 126.7)
+    return (37.0 <= lat <= 38.8 and 127.5 <= lon <= 129.5) or \
+           (33.2 <= lat <= 33.6 and 126.2 <= lon <= 126.7)
 
-def get_max_zoom(lat, lon, selected_union):
+def get_max_zoom(lat, lon, selected_tree):
     point = Point(lon, lat)
-    if selected_union.intersects(point):
+    if len(selected_tree.query(point)) > 0:
         return 17
     elif is_mountain(lat, lon):
         return 14
@@ -52,7 +68,6 @@ def num2deg(x, y, zoom):
     return lat_deg, lon_deg
 
 def download_tile(z, x, y):
-    url = TILE_URL.format(z=z, x=x, y=y)
     tile_dir = os.path.join(OUTPUT_DIR, str(z), str(x))
     tile_path = os.path.join(tile_dir, f"{y}.png")
 
@@ -60,6 +75,7 @@ def download_tile(z, x, y):
         return
 
     os.makedirs(tile_dir, exist_ok=True)
+    url = TILE_URL.format(z=z, x=x, y=y)
 
     try:
         time.sleep(0.01)
@@ -67,13 +83,13 @@ def download_tile(z, x, y):
         if r.status_code == 200:
             with open(tile_path, "wb") as f:
                 f.write(r.content)
-            print(f"[✓] {z}/{x}/{y}")
+            logging.info(f"[✓] {z}/{x}/{y}")
         else:
             raise Exception(f"HTTP {r.status_code}")
     except Exception as e:
+        logging.error(f"[✗] {z}/{x}/{y} - {e}")
         with open(FAILED_LOG, "a") as log:
             log.write(f"{z},{x},{y} - {e}\n")
-        print(f"[✗] {z}/{x}/{y} - {e}")
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -86,41 +102,55 @@ def main():
     zoom_max = args.zoom
     region_names = args.region
 
+    if os.path.exists(FAILED_LOG):
+        os.remove(FAILED_LOG)
+
     selected = CITY_GDF[CITY_GDF["CTP_KOR_NM"].isin(region_names)]
     if selected.empty:
         raise ValueError(f"선택한 지역을 찾을 수 없습니다: {region_names}")
 
-    selected_union = selected.unary_union
-    bounds = CITY_GDF.total_bounds  # 전국 범위 사용
+    selected_geoms = list(selected.geometry)
+    selected_tree = STRtree(selected_geoms)
+
+    bounds = CITY_GDF.total_bounds
     min_lon, min_lat, max_lon, max_lat = bounds
 
     for z in range(ZOOM_MIN, zoom_max + 1):
         x_start, y_end = deg2num(max_lat, min_lon, z)
         x_end, y_start = deg2num(min_lat, max_lon, z)
-        print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_end}~{y_start} for {region_names} + 전국")
+        logging.info(f"[Zoom {z}] 시작: x={x_start}~{x_end}, y={y_end}~{y_start}")
 
-        tasks = []
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            for x in range(x_start, x_end + 1):
-                for y in range(y_end, y_start + 1):
-                    lat, lon = num2deg(x + 0.5, y + 0.5, z)
-                    point = Point(lon, lat)
+        task_list = []
+        for x in range(x_start, x_end + 1):
+            for y in range(y_end, y_start + 1):
+                lat, lon = num2deg(x + 0.5, y + 0.5, z)
+                point = Point(lon, lat)
 
-                    if z <= 12:
-                        # 전국 줌 5~12 무조건 다운로드
-                        tasks.append(executor.submit(download_tile, z, x, y))
+                if z <= 12:
+                    task_list.append((z, x, y))
+                else:
+                    if len(selected_tree.query(point)) == 0:
                         continue
-
-                    # 줌 13 이상은 region 내부만
-                    if not selected_union.intersects(point):
-                        continue
-
-                    max_tile_zoom = get_max_zoom(lat, lon, selected_union)
+                    max_tile_zoom = get_max_zoom(lat, lon, selected_tree)
                     if z <= max_tile_zoom:
-                        tasks.append(executor.submit(download_tile, z, x, y))
+                        task_list.append((z, x, y))
 
-            for future in as_completed(tasks):
-                _ = future.result()
+        # ✅ 프로그래스 바 + AWX-friendly 로그
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            progress = tqdm(total=len(task_list), desc=f"Zoom {z}")
+            next_log_percent = 10
+
+            def wrapped_download(args):
+                nonlocal next_log_percent
+                download_tile(*args)
+                progress.update(1)
+                percent = int(progress.n / len(task_list) * 100)
+                if percent >= next_log_percent:
+                    logging.info(f"[Zoom {z}] 진행률: {percent}%")
+                    next_log_percent += 10
+
+            executor.map(wrapped_download, task_list)
+            progress.close()
 
 if __name__ == "__main__":
     main()

@@ -63,18 +63,19 @@ def download_tile(z, x, y):
         time.sleep(0.1)
         with requests.Session() as session:
             r = session.get(url, headers=HEADERS, timeout=10)
-            if r.status_code == 200 and 'image/png' in r.headers.get('Content-Type', ''):
+            content_type = r.headers.get('Content-Type', '')
+            if r.status_code == 200 and 'image' in content_type:
                 with open(tile_path, "wb") as f:
                     f.write(r.content)
-                print(f"[✓] {z}/{x}/{y}")
+                print(f"[✓] {z}/{x}/{y} - {content_type}")
             else:
-                raise Exception(f"Invalid response - status {r.status_code}")
+                raise Exception(f"Invalid response - status {r.status_code}, content-type {content_type}")
     except Exception as e:
         with open(FAILED_LOG, "a") as log:
             log.write(f"{z},{x},{y} - {e}\n")
         print(f"[✗] {z}/{x}/{y} - {e}")
 
-# ✅ main 함수
+# main 함수
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--min_zoom", type=int, default=12, help="지역 필터링 기준 최소 줌 레벨")

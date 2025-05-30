@@ -15,7 +15,7 @@ BASE_URL = f"http://api.vworld.kr/req/wmts/1.0.0/{API_KEY}/Satellite/{{z}}/{{y}}
 
 OUTPUT_DIR = "vworld_satellite_korea_by_zoom"
 FAILED_LOG = "failed_satellite_tiles.txt"
-MAX_WORKERS = 4
+MAX_WORKERS = 10
 
 MIN_LAT, MAX_LAT = 33.0, 39.6
 MIN_LON, MAX_LON = 124.5, 131.0
@@ -60,53 +60,41 @@ def download_tile(z, x, y):
     os.makedirs(tile_dir, exist_ok=True)
 
     try:
-        time.sleep(0.2)
+        time.sleep(0.1)
         with requests.Session() as session:
             r = session.get(url, headers=HEADERS, timeout=10)
-            if r.status_code == 200 and 'image/jpeg' in r.headers.get('Content-Type', ''):
+            if r.status_code == 200 and 'image/png' in r.headers.get('Content-Type', ''):
                 with open(tile_path, "wb") as f:
                     f.write(r.content)
                 print(f"[✓] {z}/{x}/{y}")
             else:
-                raise Exception(f"Invalid content-type: {r.headers.get('Content-Type')}")
+                raise Exception(f"Invalid response - status {r.status_code}")
     except Exception as e:
         with open(FAILED_LOG, "a") as log:
             log.write(f"{z},{x},{y} - {e}\n")
         print(f"[✗] {z}/{x}/{y} - {e}")
 
-# 줌 제한 설정 함수
-def get_max_zoom(lat, lon, selected_tree):
-    point = Point(lon, lat)
-    if len(selected_tree.query(point)) > 0:
-        return 12  # 시가지
-    elif (37.0 <= lat <= 38.8 and 127.5 <= lon <= 129.5) or (33.2 <= lat <= 33.6 and 126.2 <= lon <= 126.7):
-        return 10  # 산지
-    elif 33.0 <= lat <= 39.6 and 124.5 <= lon <= 131.0:
-        return 10  # 육지
-    else:
-        return 10  # 해상
-
-# 메인 실행
+# ✅ main 함수
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--min_zoom", type=int, default=5, help="최소 줌 레벨")
-    parser.add_argument("--max_zoom", type=int, default=13, help="최대 줌 레벨")
-    parser.add_argument("--region", nargs="+", required=True, help="지역 이름 리스트 (예: 서울특별시 부산광역시)")
+    parser.add_argument("--min_zoom", type=int, default=12, help="지역 필터링 기준 최소 줌 레벨")
+    parser.add_argument("--max_zoom", type=int, default=15, help="최대 줌 레벨")
+    parser.add_argument("--region", nargs="+", required=True, help="지역 이름 리스트")
     args = parser.parse_args()
 
-    region_names = args.region
     zoom_min = args.min_zoom
     zoom_max = args.max_zoom
+    region_names = args.region
 
     selected = CITY_GDF[CITY_GDF["CTP_KOR_NM"].isin(region_names)]
     if selected.empty:
-        raise ValueError(f"선택한 지역이 없습니다: {region_names}")
+        raise ValueError(f"선택한 지역을 찾을 수 없습니다: {region_names}")
     selected_tree = STRtree(selected.geometry)
 
     if os.path.exists(FAILED_LOG):
         os.remove(FAILED_LOG)
 
-    for z in range(zoom_min, zoom_max + 1):
+    for z in range(5, zoom_max + 1):
         x_start, y_start = deg2num(MAX_LAT, MIN_LON, z)
         x_end, y_end = deg2num(MIN_LAT, MAX_LON, z)
         print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_start}~{y_end}")
@@ -116,8 +104,13 @@ def main():
             for x in range(x_start, x_end + 1):
                 for y in range(y_start, y_end + 1):
                     lat, lon = num2deg(x + 0.5, y + 0.5, z)
-                    if z <= get_max_zoom(lat, lon, selected_tree):
+                    point = Point(lon, lat)
+
+                    if z <= zoom_min:
                         tasks.append(executor.submit(download_tile, z, x, y))
+                    else:
+                        if len(selected_tree.query(point)) > 0:
+                            tasks.append(executor.submit(download_tile, z, x, y))
 
             for future in as_completed(tasks):
                 _ = future.result()

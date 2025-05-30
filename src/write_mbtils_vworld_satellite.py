@@ -1,10 +1,12 @@
 import sqlite3, os
 
 def encode_tile(path):
+    """타일 파일을 바이너리로 읽기"""
     with open(path, 'rb') as f:
         return f.read()
 
 def init_db(path):
+    """MBTiles DB 초기화 및 메타데이터 삽입"""
     conn = sqlite3.connect(path)
     cursor = conn.cursor()
     cursor.executescript("""
@@ -13,11 +15,11 @@ def init_db(path):
     CREATE UNIQUE INDEX tile_index on tiles (zoom_level, tile_column, tile_row);
     """)
     metadata = [
-        ('name', 'Korea Map'),
-        ('format', 'jpeg'),
+        ('name', 'VWorld Satellite Map'),
+        ('format', 'jpeg'),  # ✅ 포맷은 반드시 'jpeg'
         ('type', 'baselayer'),
         ('version', '1.0'),
-        ('description', 'OSM tiles for Korea'),
+        ('description', 'VWorld satellite tiles for Korea'),
         ('minzoom', '5'),
         ('maxzoom', '17'),
         ('bounds', '124.5,33.0,131.0,39.6'),
@@ -28,10 +30,12 @@ def init_db(path):
     return conn
 
 def insert_tile(conn, z, x, y, data):
+    """Y 좌표를 MBTiles 기준으로 변환 후 타일 삽입"""
     y_mbtiles = (2 ** z - 1) - y
     conn.execute("INSERT OR REPLACE INTO tiles VALUES (?, ?, ?, ?)", (z, x, y_mbtiles, data))
 
 def walk_tiles(tile_dir, mbtiles_path):
+    """타일 폴더 구조 탐색 및 DB 저장"""
     conn = init_db(mbtiles_path)
 
     for z in os.listdir(tile_dir):

@@ -79,8 +79,8 @@ def download_tile(z, x, y):
 # ✅ main 함수
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--min_zoom", type=int, default=5, help="최소 줌 레벨")
-    parser.add_argument("--max_zoom", type=int, default=13, help="최대 줌 레벨")
+    parser.add_argument("--min_zoom", type=int, default=12, help="지역 필터링 기준 최소 줌 레벨")
+    parser.add_argument("--max_zoom", type=int, default=15, help="최대 줌 레벨")
     parser.add_argument("--region", nargs="+", required=True, help="지역 이름 리스트")
     args = parser.parse_args()
 
@@ -96,7 +96,7 @@ def main():
     if os.path.exists(FAILED_LOG):
         os.remove(FAILED_LOG)
 
-    for z in range(zoom_min, zoom_max + 1):
+    for z in range(5, zoom_max + 1):
         x_start, y_start = deg2num(MAX_LAT, MIN_LON, z)
         x_end, y_end = deg2num(MIN_LAT, MAX_LON, z)
         print(f"\n[Zoom {z}] x: {x_start}~{x_end}, y: {y_start}~{y_end}")
@@ -108,11 +108,9 @@ def main():
                     lat, lon = num2deg(x + 0.5, y + 0.5, z)
                     point = Point(lon, lat)
 
-                    if z == zoom_min:
-                        # 전국 전체 다운로드
+                    if z <= zoom_min:
                         tasks.append(executor.submit(download_tile, z, x, y))
                     else:
-                        # 선택 지역만 다운로드
                         if len(selected_tree.query(point)) > 0:
                             tasks.append(executor.submit(download_tile, z, x, y))
 

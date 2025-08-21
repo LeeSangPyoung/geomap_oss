@@ -4,3 +4,4 @@ shapely
 flask
 pillow
 flask_cors
+tqdm
